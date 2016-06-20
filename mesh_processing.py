@@ -5,6 +5,8 @@ import scipy
 from scipy import cluster
 from emd import emd
 from os import listdir
+from numpy import random
+import math
 
 import sys
 sys.path.append("../Opensource/cgal-swig-bindings/build-python/")
@@ -15,9 +17,11 @@ from CGAL import CGAL_Polyhedron_3
 from CGAL import CGAL_Polygon_mesh_processing
 
 Vertex = CGAL.CGAL_Kernel.Point_3
+Vector = CGAL.CGAL_Kernel.Vector_3
 Polyhedron = CGAL.CGAL_Polyhedron_3.Polyhedron_3
 Mod = CGAL.CGAL_Polyhedron_3.Polyhedron_modifier
 PolySignature = CGAL.CGAL_Polygon_mesh_processing.PolySignature
+BoundingBox = CGAL.CGAL_Polygon_mesh_processing.BoundingBox
 
 class MeshProcessor(object):
 	"""Class for CGAL polyhedral mesh operations"""
@@ -70,6 +74,12 @@ class MeshProcessor(object):
 				w = sig.weight_at(_)
 				points.append([pos.x(), pos.y(), pos.z()])
 				weights.append(w)
+
+		#pick 500 points at random
+		indices = np.random.permutation(range(len(points)))[:500]
+		points = [points[_] for _ in indices]
+		weights = [weights[_] for _ in indices]
+
 		weights = np.array(weights)
 		weights = np.divide(weights,weights.sum()) #normalize
 		signature = [np.array(points), weights]
@@ -84,16 +94,27 @@ class MeshProcessor(object):
 
 		return dist
 
+	def similarity(self,sig1,sig2):
+		dist = emd(sig1[0], sig2[0], sig1[1], sig2[1]);
+		return dist
+
 	def cluster(self, polygon_list):
+		
+		signatures = [self.signature(poly) for poly in polygon_list]
+
 		distance_mat = np.zeros((len(polygon_list), len(polygon_list)))
 		for _ in range(len(polygon_list)):
-			for _x in range(len(polygon_list)):
-				poly = polygon_list[_]
-				poly2 = polygon_list[_x]
-				distance_mat[_][_x] = self.similarity_metric(poly, poly2)
-		
+			for _x in range(_):
+				sig = signatures[_]
+				sig2 = signatures[_x]
+				distance_mat[_][_x] = self.similarity(sig, sig2)
+				distance_mat[_x][_] = distance_mat[_][_x]
+			distance_mat[_][_] = 0
+
+		cluster_count = int(math.sqrt(len(polygon_list)))
+
 		linkage = scipy.cluster.hierarchy.centroid(distance_mat)
-		clusters = scipy.cluster.hierarchy.fcluster(linkage, 0.05)
+		clusters = scipy.cluster.hierarchy.fcluster(linkage, 0.2)
 		return clusters
 
 	def polygons_in_cluster(self, polygon_list, clusters, id):
@@ -103,10 +124,46 @@ class MeshProcessor(object):
 				select_polygons.append(polygon_list[_])
 		return select_polygons
 
+	def get_matrix(self, bounding_box):
+		translation = bounding_box.get_origin()
+		x_axis = bounding_box.get_x_axis()
+		y_axis = bounding_box.get_y_axis()
+		z_axis = bounding_box.get_z_axis()
+
+		matrix = np.matrix([[x_axis.x(), x_axis.y(), x_axis.z(), translation.x()],
+			[y_axis.x(), y_axis.y(), y_axis.z(), translation.y()],
+			[z_axis.x(), z_axis.y(), z_axis.z(), translation.z()],
+			[0,0,0,1]])
+		return matrix
+		
+	def align(self, poly, bounding_box):
+
+		old_bounding_box = BoundingBox(poly)
+		old_matrix = self.get_matrix(old_bounding_box)
+		new_matrix = self.get_matrix(bounding_box)
+
+		t_mat = (old_matrix.I * new_matrix).tolist()
+
+		x_axis = Vector(t_mat[0][0],t_mat[0][1],t_mat[0][2])
+		y_axis = Vector(t_mat[1][0],t_mat[1][1],t_mat[1][2])
+		z_axis = Vector(t_mat[2][0],t_mat[2][1],t_mat[2][2])
+
+		translation = Vector(t_mat[2][0],t_mat[2][1],t_mat[2][2])
+
+		processor = CGAL.CGAL_Polygon_mesh_processing.Mesh_segmenter(poly)
+		new_poly =processor.transform_mesh(translation, x_axis, y_axis, z_axis)
+
+		return new_poly
+
+	def stitch(self, polygon_list):
+		processor = CGAL.CGAL_Polygon_mesh_processing.Mesh_segmenter(polygon_list[0])
+		return processor.concatenate_mesh(polygon_list)
+
+
 #IO helper functions
-	def write(self,polygon_list, folder):
+	def write(self,polygon_list, folder, offset=0):
 		for _ in range(len(polygon_list)):
-			location = folder + "{}.off".format(_)
+			location = folder + "{}.off".format(_+offset)
 			polygon_list[_].write_to_file(location)
 		
 		return polygon_list

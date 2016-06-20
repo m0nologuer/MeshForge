@@ -15,11 +15,9 @@ from CGAL import CGAL_Kernel
 from CGAL import CGAL_Polyhedron_3
 from CGAL import CGAL_Polygon_mesh_processing
 
-BoundingBox = CGAL.CGAL_Polygon_mesh_processing.BoundingBox
-Align = CGAL.CGAL_Polygon_mesh_processing.Align
-Stitch = CGAL.CGAL_Polygon_mesh_processing.Stitch
-
 Vertex = CGAL.CGAL_Kernel.Point_3
+Vector_3 = CGAL.CGAL_Kernel.Vector_3
+BoundingBox = CGAL.CGAL_Polygon_mesh_processing.BoundingBox
 
 Library = mesh_library.MeshLibrary()
 
@@ -29,7 +27,7 @@ class MeshAssembler(object):
 	def __init__(self):
 
 		self.max_components = 30
-		self.features_per_vec = 3 * 8 + 2
+		self.features_per_vec = 3 * 4 + 2
 		self.vector_length = self.features_per_vec * self.max_components
 		return None
 
@@ -73,7 +71,7 @@ class MeshAssembler(object):
 			D2, theta_d = self.generate_mlp(self.G,1)
 
 		#pre-train
-		self.pre_train(D1, feature_vectors[0..10])
+		self.pre_train(D1, feature_vectors[:10])
 
 		obj_d=tf.reduce_mean(tf.log(D1)+tf.log(1-D2))
 		self.opt_d=tf.train.GradientDescentOptimizer(0.01).minimize(1-obj_d,global_step=batch,var_list=theta_d)
@@ -92,7 +90,9 @@ class MeshAssembler(object):
 			y= np.random.random((len(vector),1))
 			sess.run(self.opt_g, {self.y_node: y}) 
 
-	def generate_feature_vector(self, count)
+		return None
+
+	def generate_feature_vector(self, count):
 		y= np.random.random((len(self.vector_length),1))
 
 		sess=tf.InteractiveSession()
@@ -108,10 +108,11 @@ class MeshAssembler(object):
 	def encode_feature_vector(self, mesh, component_list):		
 		feature_vector_components = []
 
-		for poly in component_list:
-			#add the bounding box coordinated
+		for poly in component_list[:self.max_components]:
+			#add the bounding box transform to the feature vector
 			bounding_box = BoundingBox(poly)
-			for vector in bounding_box:
+			features = [bounding_box.get_origin(), bounding_box.get_x_axis(), bounding_box.get_y_axis(), bounding_box.get_z_axis()]
+			for vector in features:
 				feature_vector_components.append(vector.x())
 				feature_vector_components.append(vector.y())
 				feature_vector_components.append(vector.z())
@@ -121,38 +122,47 @@ class MeshAssembler(object):
 			feature_vector_components.append(mesh_class)
 			feature_vector_components.append(mesh_style)
 
-		feature_vector = np.reshape(np.array(feature_vector),(self.vector_length,1))
+		#pad with zeros
+		for _ in range(self.max_components - len(component_list)):
+			for n in range(14):
+				feature_vector_components.append(0)
+
+		feature_vector = np.array(feature_vector_components)
 
 		return feature_vector
+
 
 	def decode_feature_vector(self, feature_vector):
 
 		polygon_list = []
 
 		for _ in range(self.max_components):
-			bounding_box = []
 			offset = _ * self.max_components
-			for x in range(8):
-				vector = Vertex(feature_vector[offset+3*x], feature_vector[offset+3*x+1], feature_vector[offset+3*x+2])
-				bounding_box.append(vector)
+
+			translation = Vector_3(feature_vector[offset], feature_vector[offset+1], feature_vector[offset+2])
+			x_axis = Vector_3(feature_vector[offset+3*1], feature_vector[offset+3*1+1], feature_vector[offset+3*1+2])
+			y_axis = Vector_3(feature_vector[offset+3*2], feature_vector[offset+3*2+1], feature_vector[offset+3*2+2])
+			z_axis = Vector_3(feature_vector[offset+3*3], feature_vector[offset+3*3+1], feature_vector[offset+3*3+2])
+
+			bounding_box = BoundingBox(translation, x_axis, y_axis, z_axis)
+
 			poly = Library.retrive_component(vector[offset+24],vector[offset+25])
-			polygon_list.applend(Align(poly, bounding_box))
+			
+			new_poly = mesh_processing.MeshProcessor.align(poly, bounding_box)
+			polygon_list.append(new_poly)
 
 		return polygon_list
 
-	def stitch(self, polygon_list):
-		return Stitch(polygon_list)
-
-	def training_set(polygons):	
+	def training_set(self, polygons):	
 		feature_vectors = []	
 		for poly in polygons:
-			poly_list = mesh_procecssing.MeshProcessor.segmentation(poly)
+			poly_list = mesh_processing.MeshProcessor().segmentation(poly)
 			vec = self.encode_feature_vector(poly,poly_list)
 			feature_vectors.append(vec)
 
 		self.generative_adversarial_net(feature_vectors)
 
-	def generate_meshes(count):
+	def generate_meshes(self, count):
 		vectors = generate_feature_vector(count)
 		polygon_lists = [self.decode_feature_vector(vec) for vec in vectors]
 		polygons = [self.stitch(poly_list) for poly_list in polygon_lists]
