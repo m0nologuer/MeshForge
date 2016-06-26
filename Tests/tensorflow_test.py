@@ -1,10 +1,6 @@
 # import the packages
 import numpy as np
 import tensorflow as tf
-from scipy.optimize import minimize
-import scipy.stats as stats
-import time
-import random
 
 
 class MeshAssembler(object):
