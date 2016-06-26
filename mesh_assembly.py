@@ -26,7 +26,7 @@ class MeshAssembler(object):
 
 	def __init__(self):
 
-		self.max_components = 1
+		self.max_components = 10
 		self.features_per_vec = 3 * 4 + 2
 		self.vector_length = self.features_per_vec * self.max_components
 		
@@ -37,11 +37,12 @@ class MeshAssembler(object):
 	# Make a mutlilevel perceptron - used for D_pre, D1, D2, G networks
 	def generate_mlp(self, input, output_dim):
 	    # construct learnable parameters within local scope
-	    w1=tf.get_variable("w0", [input.get_shape()[1], 6], initializer=tf.random_normal_initializer())
-	    b1=tf.get_variable("b0", [6], initializer=tf.constant_initializer(0.0))
-	    w2=tf.get_variable("w1", [6, 6], initializer=tf.random_normal_initializer())
-	    b2=tf.get_variable("b1", [6], initializer=tf.constant_initializer(0.0))
-	    w3=tf.get_variable("w2", [6,output_dim], initializer=tf.random_normal_initializer())
+	    size = input.get_shape()[1]
+	    w1=tf.get_variable("w0", [size, size], initializer=tf.random_normal_initializer())
+	    b1=tf.get_variable("b0", [size], initializer=tf.constant_initializer(0.0))
+	    w2=tf.get_variable("w1", [size, size], initializer=tf.random_normal_initializer())
+	    b2=tf.get_variable("b1", [size], initializer=tf.constant_initializer(0.0))
+	    w3=tf.get_variable("w2", [size,output_dim], initializer=tf.random_normal_initializer())
 	    b3=tf.get_variable("b2", [output_dim], initializer=tf.constant_initializer(0.0))
 	    # nn operators
 	    fc1=tf.nn.tanh(tf.matmul(input,w1)+b1)
@@ -79,15 +80,19 @@ class MeshAssembler(object):
 		feature_vector = np.append(feature_vector_components,np.zeros(zeros))
 		return feature_vector
 
+	def fill_feature_vector(number):
+		feature_vector = np.full_like(np.arange(self.vector_length, dtype=np.float32), number)
+
+
 	def pre_train(self, D, theta_d, feature_vectors):
 		batch=tf.Variable(0)
 		
 		x_node = tf.placeholder(tf.float32, shape= (1, self.vector_length) )
 
-		with tf.variable_scope("D0") as scope:
+		with tf.variable_scope("D") as scope:
 			scope.reuse_variables()
 			obj_d=tf.reduce_mean(tf.log(D))
-			opt_d=tf.train.GradientDescentOptimizer(0.01).minimize(1-obj_d,global_step=batch,var_list=theta_d)
+			opt_d=tf.train.AdamOptimizer(1e-4).minimize(1-obj_d,global_step=batch,var_list=theta_d)
 
 		sess=tf.InteractiveSession()
 		
@@ -110,10 +115,10 @@ class MeshAssembler(object):
 			D2, theta_d = self.generate_mlp(self.G,1)
 
 		self.obj_d=tf.reduce_mean(tf.log(D1)+tf.log(1-D2))
-		self.opt_d=tf.train.GradientDescentOptimizer(0.01).minimize(1-self.obj_d,global_step=batch,var_list=theta_d)
+		self.opt_d=tf.train.AdamOptimizer(0.1).minimize(1-self.obj_d,global_step=batch,var_list=theta_d)
 
 		self.obj_g=tf.reduce_mean(tf.log(D2))
-		self.opt_g=tf.train.GradientDescentOptimizer(0.01).minimize(1-self.obj_g,global_step=batch,var_list=theta_g)
+		self.opt_g=tf.train.AdamOptimizer(0.1).minimize(1-self.obj_g,global_step=batch,var_list=theta_g)
 
 	def train(self, feature_vectors):
 
@@ -200,8 +205,9 @@ class MeshAssembler(object):
 		feature_vectors = []	
 		for poly in polygons:
 			poly_list = mesh_processing.MeshProcessor().segmentation(poly)
-			vec = self.encode_feature_vector(poly,poly_list)
-			feature_vectors.append(vec)
+			if (poly_list.size() < 11):
+				vec = self.encode_feature_vector(poly,poly_list)
+				feature_vectors.append(vec)
 
 		self.train(feature_vectors)
 
