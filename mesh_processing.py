@@ -53,7 +53,7 @@ class MeshProcessor(object):
 		poly.delegate(m)
 
 		#Remove duplicate vertices
-		poly = CGAL.CGAL_Polygon_mesh_processing.Mesh_segmenter(poly).stitch_borders()
+		poly = CGAL.CGAL_Polygon_mesh_processing.Mesh_util(poly).stitch_borders()
 
 		return poly
 
@@ -156,7 +156,7 @@ class MeshProcessor(object):
 		return new_poly
 
 	def stitch(self, polygon_list):
-		processor = CGAL.CGAL_Polygon_mesh_processing.Mesh_segmenter(polygon_list[0])
+		processor = CGAL.CGAL_Polygon_mesh_processing.Mesh_util(polygon_list[0])
 		return processor.concatenate_mesh(polygon_list)
 
 
