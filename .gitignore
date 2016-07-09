@@ -1,3 +1,5 @@
 output/*
 MeshDatabase/*
 junk.txt
+venv/*
+db.sqlite3

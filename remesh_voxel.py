@@ -64,6 +64,11 @@ class RemeshVoxel(object):
 						if tree.do_intersect(Segment(point, point_2)):
 							interior_score = interior_score + 1.0/27.0
 
+			#Raycast outside polyhedron
+			intersections = tree.number_of_intersected_primitives(Segment(point, origin));
+			if (intersections%2 != 0):
+				interior_score = 1
+
 			return interior_score;
 
 		mat = np.empty((resolution,resolution,resolution))
@@ -90,6 +95,7 @@ class RemeshVoxel(object):
 	def remesh(self, inr_file, bounding_box, iso_value, angular, radius, distance):
 		c2t3 = C2T3(Tr())
 		criteria = Criteria(angular, radius, distance)
+
 		voxels = Voxel(inr_file, iso_value)
 
 		b = bounding_box
@@ -100,6 +106,7 @@ class RemeshVoxel(object):
 
 		Mesher(c2t3, surface, criteria)
 		poly = Polyhedron()
+
 		Output(c2t3, poly)
 		return poly
 		

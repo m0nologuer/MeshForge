@@ -57,6 +57,12 @@ class MeshProcessor(object):
 
 		return poly
 
+	def simplify_mesh(self, poly):
+		util = CGAL.CGAL_Polygon_mesh_processing.Mesh_util(poly)
+		util.simplify_mesh(1000)
+		simple_poly = util.get_mesh()
+		return simple_poly
+
 	def segmentation(self, poly):
 		poly_list = [x for x in CGAL.CGAL_Polygon_mesh_processing.Mesh_segmenter(poly).segmentation()]
 
@@ -100,6 +106,7 @@ class MeshProcessor(object):
 
 	def cluster(self, polygon_list):
 		
+		polygon_list = [self.simplify_mesh(poly) for poly in polygon_list]
 		signatures = [self.signature(poly) for poly in polygon_list]
 
 		distance_mat = np.zeros((len(polygon_list), len(polygon_list)))

@@ -24,6 +24,7 @@ class MeshLibrary(object):
 	def add_files_from_folder(self,folder, split):
 		polys = MeshProcessor.load(folder)
 		#Break up the polygons and cluster them 
+
 		if (split == bool(1)):
 			segments = []
 			for poly in polys:
