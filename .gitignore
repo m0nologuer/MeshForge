@@ -3,3 +3,11 @@ MeshDatabase/*
 junk.txt
 venv/*
 db.sqlite3
+*.pyc
+Tests/*.pyc
+pylib/*.pyc
+src/*.pyc
+*.off
+*.inr
+*.gif
+*.sqlite3
