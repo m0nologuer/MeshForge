@@ -31,7 +31,7 @@ class ProbabilityNode(object):
 		self.parents.append(parent_node)
 		parent_node.children.append(self)
 
-	def build_node_tf_graph(self):
+	def build_node_tf_graph(self, batch_size):
 
 		if (self.graph_initialized):
 			return
@@ -39,10 +39,10 @@ class ProbabilityNode(object):
 		if (self.is_continuous):
 			self.n = len(self.distribution["Mean"])
 			self.output_size = self.n + self.n*(self.n+1)/2 + self.n #Size of vector + 1/2 covariance matrix
-			self.feature_vector = tf.placeholder(tf.float32, shape= [self.n] )
+			self.feature_vectors = [tf.placeholder(tf.float32, shape= [self.n] ) for _ in range(batch_size)]
 		else:
 			self.output_size = len(self.distribution)
-			self.feature_vector = tf.placeholder(tf.float32, shape= [len(self.distribution)] )
+			self.feature_vectors = [tf.placeholder(tf.float32, shape= [len(self.distribution)] ) for _ in range(batch_size)]
 
 
 		#If this is the root node
@@ -296,19 +296,19 @@ class AssemblyModel(object):
 			for _ in range(iterations):
 				best_measurement_error = 0
 
-				for vector in feature_vectors:
-					#Set variables
-					feed_dict = {}
-					for node in nodes:
+				#Set variables
+				feed_dict = {}
+				for node in nodes:
+					for _ in range(len(feature_vectors))
 						if node.is_continuous:
-							feed_dict[node.feature_vector] = numpy.reshape(vector[node.label], (node.n))
+							feed_dict[node.feature_vectors[_]] = numpy.reshape(feature_vectors[_][node.label], (node.n)) 
 						else:
-							feed_dict[node.feature_vector] = numpy.reshape(vector[node.label], (len(node.distribution)))
-					
-					for node in [node for node in nodes if node.label == "C_type0"]:
-						print _, node.label, sess.run(node.error_function, feed_dict), sess.run(node.layer_output[0,:3] - node.feature_vector, feed_dict), sess.run(node.layer_output[0,:3]), vector[node.label]
+							feed_dict[node.feature_vector[_]] = numpy.reshape(feature_vectors[_][node.label], (len(node.distribution)))
+						
+				for node in [node for node in nodes if node.label == "C_type0"]:
+					print _, node.label, sess.run(node.error_function, feed_dict), sess.run(node.layer_output[0,:3])
 
-					sess.run(opt, feed_dict)
+				sess.run(opt, feed_dict)
 
 			#Update variables
 			for node in nodes:
