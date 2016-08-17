@@ -1,5 +1,5 @@
-import mesh
-import mesh_processing
+import sys
+sys.path.append("../Opensource/cgal-swig-bindings/build-python/")
 
 import pylib
 from pylib import inrimage

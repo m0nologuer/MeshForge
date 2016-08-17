@@ -1,4 +1,5 @@
 import mesh
+import remesh_voxel
 
 import numpy as np
 import scipy
@@ -68,7 +69,7 @@ class MeshProcessor(object):
 
 		return poly_list
 
-	def signature(self,poly):
+	def signature(self,poly,normalize=True):
 		#Run the CGAL algorithm, to gen points per cell
 		#Put resuts from non-empty cells into numpy arrays
 		sig = PolySignature(poly)
@@ -81,15 +82,18 @@ class MeshProcessor(object):
 				points.append([pos.x(), pos.y(), pos.z()])
 				weights.append(w)
 
-		#pick 500 points at random
-		indices = np.random.permutation(range(len(points)))[:500]
-		points = [points[_] for _ in indices]
-		weights = [weights[_] for _ in indices]
+		if (normalize):
+			#pick 500 points at random
+			indices = np.random.permutation(range(len(points)))[:500]
+			points = [points[_] for _ in indices]
+			weights = [weights[_] for _ in indices]
 
-		weights = np.array(weights)
-		weights = np.divide(weights,weights.sum()) #normalize
+			weights = np.array(weights)
+			weights = np.divide(weights,weights.sum()) #normalize
+
 		signature = [np.array(points), weights]
 		return signature
+		
 
 	def similarity_metric(self,poly1,poly2):
 
@@ -166,6 +170,29 @@ class MeshProcessor(object):
 		processor = CGAL.CGAL_Polygon_mesh_processing.Mesh_util(polygon_list[0])
 		return processor.concatenate_mesh(polygon_list)
 
+
+	def feature_vectors(self, poly):
+		#Create feature vector from polyhedron
+		remesher = remesh_voxel.RemeshVoxel()
+		res = 10
+
+		#Voxel vector representation
+		mat = np.reshape(remesher.voxelize(poly, res),(-1))
+
+		#Salient points histogram
+		hist_points = self.signature(poly, False)[1]
+		hist = np.histogram(np.log(hist_points),128)
+		hist_features = np.append(hist[0],hist[1])
+
+		#bounding box features
+		bounding_box = remesh_voxel.BoundingBox(poly)
+		box = self.get_matrix(bounding_box)
+
+		vector = np.append(mat, hist_features)
+		vector = np.append(vector, box)
+		vector = np.reshape(np.array(vector),(-1))
+
+		return vector
 
 #IO helper functions
 	def write(self,polygon_list, folder, offset=0):
