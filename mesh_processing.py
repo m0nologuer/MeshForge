@@ -64,10 +64,57 @@ class MeshProcessor(object):
 		simple_poly = util.get_mesh()
 		return simple_poly
 
-	def segmentation(self, poly):
-		poly_list = [x for x in CGAL.CGAL_Polygon_mesh_processing.Mesh_segmenter(poly).segmentation()]
+	def segmentation(self, poly, adjacanacy=False):
+
+		#Split
+		segmenter = CGAL.CGAL_Polygon_mesh_processing.Mesh_segmenter(poly)
+		poly_list = [x for x in segmenter.segmentation()]
 
 		return poly_list
+
+	def adjacancy(self, poly, poly2):
+		#adjacancy of connected components
+		segmenter = CGAL.CGAL_Polygon_mesh_processing.Mesh_segmenter(poly)
+
+		return segmenter.adjacent(poly, poly2)		
+
+	#Features that come from the segmentation algoritm
+	def sdf_features(self, poly):
+		segmenter = CGAL.CGAL_Polygon_mesh_processing.Mesh_segmenter(poly)
+		vec = segmenter.sdf_features()
+		sdf_array = np.array([vec[_] for _ in range(vec.size())])
+
+		return sdf_array
+
+	#Features derived from the covariance matrix of a few points
+	def sample_points_cov(self,poly):
+		#Run the CGAL algorithm, to gen points per cell
+		#Put resuts from non-empty cells into numpy arrays
+		sig = PolySignature(poly)
+		points = []
+		for _ in range(15625):
+			if sig.weight_at(_) != 0:
+				pos = sig.point_at(_)
+				points.append(np.array([pos.x(), pos.y(), pos.z()]))
+
+		mean = np.add.reduce(points)/len(points)
+
+		#Create covariance matrix
+		mat = np.matrix(np.zeros((3,3)))
+		for x in range(3):
+			for y in range(3):
+				mat[x,y] = np.add.reduce([(p[x]-mean[x])*(p[y]-mean[y]) for p in points])/len(points)
+
+		#Eigenvalues and vectors
+		w, v = np.linalg.eig(mat)
+
+		#Create feature vector
+		s = w[0] + w[1] + w[2]
+		vec = [w[0]/s, w[1]/s, w[2]/s, (w[0] + w[1])/s, (w[0] + w[2])/s,  (w[2] + w[1])/s,
+			w[0]/w[1], w[1]/w[2], w[2]/w[0], w[0]/w[1] + w[0]/w[2], w[0]/w[1] + w[1]/w[2],
+			w[0]/w[2] + w[1]/w[2]]
+
+		return vec
 
 	def signature(self,poly,normalize=True):
 		#Run the CGAL algorithm, to gen points per cell
@@ -146,14 +193,13 @@ class MeshProcessor(object):
 			[z_axis.x(), z_axis.y(), z_axis.z(), translation.z()],
 			[0,0,0,1]])
 		return matrix
-		
-	def align(self, poly, bounding_box):
+	
+	def transform(self, poly, matrix):
 
 		old_bounding_box = BoundingBox(poly)
 		old_matrix = self.get_matrix(old_bounding_box)
-		new_matrix = self.get_matrix(bounding_box)
 
-		t_mat = (old_matrix.I * new_matrix).tolist()
+		t_mat = (matrix * old_matrix.I).tolist()
 
 		x_axis = Vector(t_mat[0][0],t_mat[0][1],t_mat[0][2])
 		y_axis = Vector(t_mat[1][0],t_mat[1][1],t_mat[1][2])
@@ -161,38 +207,38 @@ class MeshProcessor(object):
 
 		translation = Vector(t_mat[2][0],t_mat[2][1],t_mat[2][2])
 
-		processor = CGAL.CGAL_Polygon_mesh_processing.Mesh_segmenter(poly)
+		processor = CGAL.CGAL_Polygon_mesh_processing.Mesh_util(poly)
+		new_poly =processor.transform_mesh(translation, x_axis, y_axis, z_axis)
+
+		return new_poly
+
+
+	def align(self, poly, bounding_box):
+
+		old_bounding_box = BoundingBox(poly)
+		old_matrix = self.get_matrix(old_bounding_box)
+		new_matrix = self.get_matrix(bounding_box)
+
+		t_mat = (matrix * old_matrix.I).tolist()
+
+		x_axis = Vector(t_mat[0][0],t_mat[0][1],t_mat[0][2])
+		y_axis = Vector(t_mat[1][0],t_mat[1][1],t_mat[1][2])
+		z_axis = Vector(t_mat[2][0],t_mat[2][1],t_mat[2][2])
+
+		translation = Vector(t_mat[2][0],t_mat[2][1],t_mat[2][2])
+
+		processor = CGAL.CGAL_Polygon_mesh_processing.Mesh_util(poly)
 		new_poly =processor.transform_mesh(translation, x_axis, y_axis, z_axis)
 
 		return new_poly
 
 	def stitch(self, polygon_list):
 		processor = CGAL.CGAL_Polygon_mesh_processing.Mesh_util(polygon_list[0])
-		return processor.concatenate_mesh(polygon_list)
-
-
-	def feature_vectors(self, poly):
-		#Create feature vector from polyhedron
-		remesher = remesh_voxel.RemeshVoxel()
-		res = 10
-
-		#Voxel vector representation
-		mat = np.reshape(remesher.voxelize(poly, res),(-1))
-
-		#Salient points histogram
-		hist_points = self.signature(poly, False)[1]
-		hist = np.histogram(np.log(hist_points),128)
-		hist_features = np.append(hist[0],hist[1])
-
-		#bounding box features
-		bounding_box = remesh_voxel.BoundingBox(poly)
-		box = self.get_matrix(bounding_box)
-
-		vector = np.append(mat, hist_features)
-		vector = np.append(vector, box)
-		vector = np.reshape(np.array(vector),(-1))
-
-		return vector
+		poly_list = CGAL.CGAL_Polygon_mesh_processing.Polyhedron_list()
+		for poly in polygon_list:
+			poly_list.push_back(poly)
+		return processor.concatenate_mesh(poly_list)
+		
 
 #IO helper functions
 	def write(self,polygon_list, folder, offset=0):

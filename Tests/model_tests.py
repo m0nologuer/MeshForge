@@ -1,11 +1,18 @@
 import assembly_model
 import mesh_processing
+import feature_vectors
 processor = mesh_processing.MeshProcessor()
-humans = processor.load("../Datasets/Labelled_Segmented_Models/SortTest/")
+humans = processor.load("../Datasets/Labelled_Segmented_Models/Human/")
 ass = assembly_model.AssemblyModel()
-data, labels = ass.create_feature_vectors(humans)
-print data
+fv_processor = feature_vectors.MeshFeatureVectorProcessor()
+data, labels, pca = fv_processor.create_feature_vectors(humans)
 ass.build_component_style_model(data, labels)
+
+reload(assembly_model)
+ops.reset_default_graph()
+ass = assembly_model.AssemblyModel()
+ass.reload()
+ass.generate(2, [1, 1, 1, 1, 1] , [], labels, data, pca).write_to_file("out.off")
 
 import assembly_model
 import mesh_processing
