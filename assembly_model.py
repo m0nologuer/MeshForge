@@ -15,6 +15,7 @@ import probability_node
 from probability_node import ProbabilityNode
 import feature_vectors
 from feature_vectors import MeshFeatureVectorProcessor
+from model_feature_vectors import ModelFeatureVectorProcessor
 
 class AssemblyModel(object):
 
@@ -126,7 +127,7 @@ class AssemblyModel(object):
 	def score(self,feature_vectors, R, S, labels, graph=[]):
 
 		#Raw feature vectors = list of components with bounding box & signature
-		fv_processor = MeshFeatureVectorProcessor()
+		fv_processor = ModelFeatureVectorProcessor()
 		O = fv_processor.modify_feature_vectors(feature_vectors, R, S, labels, graph)
 
 		#Max occurence for discrete distribition prior
@@ -222,7 +223,7 @@ class AssemblyModel(object):
 		reload(mesh_processing)
 
 		#Feature vectors from raw feature vectors
-		fv_processor = MeshFeatureVectorProcessor()
+		fv_processor = ModelFeatureVectorProcessor()
 		O = fv_processor.modify_feature_vectors(f_v, R, S, labels, G)
 		#Max occurence for discrete distribition prior
 		N = [ len(O[0]["N_{}".format(label)]) for label in labels]

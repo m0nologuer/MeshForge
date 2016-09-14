@@ -1,11 +1,12 @@
-import mesh
-import remesh_voxel
+#Basic utilities such as segmentation
 
+import mesh
 import numpy as np
 import scipy
 from scipy import cluster
 from emd import emd
 from os import listdir
+import os
 from numpy import random
 import math
 
@@ -21,7 +22,6 @@ Vertex = CGAL.CGAL_Kernel.Point_3
 Vector = CGAL.CGAL_Kernel.Vector_3
 Polyhedron = CGAL.CGAL_Polyhedron_3.Polyhedron_3
 Mod = CGAL.CGAL_Polyhedron_3.Polyhedron_modifier
-PolySignature = CGAL.CGAL_Polygon_mesh_processing.PolySignature
 BoundingBox = CGAL.CGAL_Polygon_mesh_processing.BoundingBox
 
 class MeshProcessor(object):
@@ -76,111 +76,7 @@ class MeshProcessor(object):
 		#adjacancy of connected components
 		segmenter = CGAL.CGAL_Polygon_mesh_processing.Mesh_segmenter(poly)
 
-		return segmenter.adjacent(poly, poly2)		
-
-	#Features that come from the segmentation algoritm
-	def sdf_features(self, poly):
-		segmenter = CGAL.CGAL_Polygon_mesh_processing.Mesh_segmenter(poly)
-		vec = segmenter.sdf_features()
-		sdf_array = np.array([vec[_] for _ in range(vec.size())])
-
-		return sdf_array
-
-	#Features derived from the covariance matrix of a few points
-	def sample_points_cov(self,poly):
-		#Run the CGAL algorithm, to gen points per cell
-		#Put resuts from non-empty cells into numpy arrays
-		sig = PolySignature(poly)
-		points = []
-		for _ in range(15625):
-			if sig.weight_at(_) != 0:
-				pos = sig.point_at(_)
-				points.append(np.array([pos.x(), pos.y(), pos.z()]))
-
-		mean = np.add.reduce(points)/len(points)
-
-		#Create covariance matrix
-		mat = np.matrix(np.zeros((3,3)))
-		for x in range(3):
-			for y in range(3):
-				mat[x,y] = np.add.reduce([(p[x]-mean[x])*(p[y]-mean[y]) for p in points])/len(points)
-
-		#Eigenvalues and vectors
-		w, v = np.linalg.eig(mat)
-
-		#Create feature vector
-		s = w[0] + w[1] + w[2]
-		vec = [w[0]/s, w[1]/s, w[2]/s, (w[0] + w[1])/s, (w[0] + w[2])/s,  (w[2] + w[1])/s,
-			w[0]/w[1], w[1]/w[2], w[2]/w[0], w[0]/w[1] + w[0]/w[2], w[0]/w[1] + w[1]/w[2],
-			w[0]/w[2] + w[1]/w[2]]
-
-		return vec
-
-	def signature(self,poly,normalize=True):
-		#Run the CGAL algorithm, to gen points per cell
-		#Put resuts from non-empty cells into numpy arrays
-		sig = PolySignature(poly)
-		points = []
-		weights = []
-		for _ in range(15625):
-			if sig.weight_at(_) != 0:
-				pos = sig.point_at(_)
-				w = sig.weight_at(_)
-				points.append([pos.x(), pos.y(), pos.z()])
-				weights.append(w)
-
-		if (normalize):
-			#pick 500 points at random
-			indices = np.random.permutation(range(len(points)))[:500]
-			points = [points[_] for _ in indices]
-			weights = [weights[_] for _ in indices]
-
-			weights = np.array(weights)
-			weights = np.divide(weights,weights.sum()) #normalize
-
-		signature = [np.array(points), weights]
-		return signature
-		
-
-	def similarity_metric(self,poly1,poly2):
-
-		sig1 = self.signature(poly1)
-		sig2 = self.signature(poly2)
-
-		dist = emd(sig1[0], sig2[0], sig1[1], sig2[1]);
-
-		return dist
-
-	def similarity(self,sig1,sig2):
-		dist = emd(sig1[0], sig2[0], sig1[1], sig2[1]);
-		return dist
-
-	def cluster(self, polygon_list):
-		
-		polygon_list = [self.simplify_mesh(poly) for poly in polygon_list]
-		signatures = [self.signature(poly) for poly in polygon_list]
-
-		distance_mat = np.zeros((len(polygon_list), len(polygon_list)))
-		for _ in range(len(polygon_list)):
-			for _x in range(_):
-				sig = signatures[_]
-				sig2 = signatures[_x]
-				distance_mat[_][_x] = self.similarity(sig, sig2)
-				distance_mat[_x][_] = distance_mat[_][_x]
-			distance_mat[_][_] = 0
-
-		cluster_count = int(math.sqrt(len(polygon_list)))
-
-		linkage = scipy.cluster.hierarchy.centroid(distance_mat)
-		clusters = scipy.cluster.hierarchy.fcluster(linkage, 0.2)
-		return clusters
-
-	def polygons_in_cluster(self, polygon_list, clusters, id):
-		select_polygons = []
-		for _ in range(len(polygon_list)):
-			if (clusters[_] == id):
-				select_polygons.append(polygon_list[_])
-		return select_polygons
+		return segmenter.adjacent(poly, poly2)				
 
 	def get_matrix(self, bounding_box):
 		translation = bounding_box.get_origin()
@@ -242,6 +138,21 @@ class MeshProcessor(object):
 
 #IO helper functions
 	def write(self,polygon_list, folder, offset=0):
+
+		#Make chain of directories
+		folder_path = folder
+		folder_create_list = []
+		while not os.path.exists(folder_path):
+			folder_create_list.append(folder_path)
+			folder_path = "/".join(str.split(folder_path,"/")[:-1])
+		folder_create_list.reverse()
+
+		for f in folder_create_list:
+			if not os.path.exists(f):
+				os.mkdir(f) #take name of last folder
+
+		offset = len(os.listdir(folder))
+
 		for _ in range(len(polygon_list)):
 			location = folder + "{}.off".format(_+offset)
 			polygon_list[_].write_to_file(location)

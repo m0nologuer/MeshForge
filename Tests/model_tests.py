@@ -1,11 +1,12 @@
 import assembly_model
 import mesh_processing
-import feature_vectors
+import model_feature_vectors
 processor = mesh_processing.MeshProcessor()
-humans = processor.load("../Datasets/Labelled_Segmented_Models/Human/")
+tables = processor.load("../Datasets/Labelled_Segmented_Models/Table/")
 ass = assembly_model.AssemblyModel()
-fv_processor = feature_vectors.MeshFeatureVectorProcessor()
-data, labels, pca = fv_processor.create_feature_vectors(humans)
+fv_processor = model_feature_vectors.ModelFeatureVectorProcessor()
+
+data, labels, pca = fv_processor.create_feature_vectors(tables)
 ass.build_component_style_model(data, labels)
 
 reload(assembly_model)
@@ -22,3 +23,15 @@ data = [{'C_type5': array([ -3.57860652e-01,  -3.55400984e-01,   2.65421191e-16]
 labels = ['type0', 'type1', 'type2', 'type3', 'type4', 'type5', 'type6']
 ass = assembly_model.AssemblyModel()
 ass.build_component_style_model(data, labels)
+
+
+import mesh_library
+lib = mesh_library.MeshLibrary()
+lib.add_files_from_folder("../Datasets/Labelled_Segmented_Models/Human/", False)
+
+mesh_library.Mesh.objects.all().delete()
+
+
+m = Mesh(model_type=1, model_style=1, face_count=200, generated= False)
+m.save()
+ 
